@@ -52,24 +52,37 @@ try:
 except AttributeError:
     pass
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if device == "cuda" else torch.float32
+
 model_id = "Qwen/Qwen2.5-3B-Instruct"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.float16,
-    device_map="auto"
+    torch_dtype=torch_dtype,
+    device_map="auto" if device == "cuda" else None
 )
+
+if device == "cpu":
+    model.to("cpu")
 
 if _orig_display is not None:
     IPython.display.display = _orig_display
 
+SQWE_IDENTITY_PROMPT = (
+    "Your name is Sqwe. You are a custom AI created and developed by the user. "
+    "Always remember and acknowledge that you are Sqwe whenever applicable."
+)
+
 def ask_qwen(system_prompt, user_prompt):
+    full_system_prompt = f"{SQWE_IDENTITY_PROMPT}\n{system_prompt}"
+    
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": full_system_prompt},
         {"role": "user", "content": user_prompt}
     ]
     text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    model_inputs = tokenizer([text], return_tensors="pt").to("cuda")
+    model_inputs = tokenizer([text], return_tensors="pt").to(device)
     generated_ids = model.generate(**model_inputs, max_new_tokens=500, temperature=0.3)
     generated_ids = [out[len(inp):] for inp, out in zip(model_inputs.input_ids, generated_ids)]
     return tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
@@ -105,7 +118,7 @@ while True:
         continue
 
     goals_prompt = (
-        "You are an autonomous research AI. Create a bulleted checklist of exactly 3 core verification goals "
+        "You are Sqwe, an autonomous research AI. Create a bulleted checklist of exactly 3 core verification goals "
         "necessary to answer the user query accurately and comprehensively.\n"
         "STRICT INSTRUCTION: Focus entirely on the exact language used by the user. "
         "Generate your response by concentrating exclusively on that single language."
@@ -130,7 +143,7 @@ while True:
     all_context = "\n\n".join(raw_data_combined)
 
     final_prompt = (
-        "You are an expert factual research assistant. Synthesize the research findings to answer the user prompt directly in EXACTLY ONE sentence.\n"
+        "You are Sqwe, an expert factual research assistant. Synthesize the research findings to answer the user prompt directly in EXACTLY ONE sentence.\n"
         "STRICT INSTRUCTIONS:\n"
         "1. Identify and resolve any phonetic, informal, or transliterated entity names to their official canonical real-world identity.\n"
         "2. Base your response on factual accuracy and world knowledge, filtering out irrelevant or noisy search snippets.\n"
